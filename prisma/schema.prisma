@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String  @id @default(cuid())
+  firebaseUID   String?  @unique
+  email         String  @unique
+  emailVerified Boolean
+  displayName   String?
+  phoneNumber   String?
+  photoURL      String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /* RELATIONSHIPS */
+  companies     CompanyMembership[]
+  invites       Invitation[]
+
+  @@map("users") 
+}
+
+
+model Company {
+  id            String  @id @default(cuid())
+  name          String
+  logo          String?
+  description   String?
+  website       String?
+  location      String?
+  email         String?
+  phoneNumber   String?
+
+ createdAt     DateTime @default(now())
+ updatedAt     DateTime @updatedAt
+
+  /* RELATIONSHIPS */
+  users         CompanyMembership[]
+  invitations   Invitation[]
+
+  @@map("companies")
+}
+
+
+enum Role {
+    ADMIN
+    MANAGER
+    EMPLOYEE
+}
+
+
+model CompanyMembership {
+  userId        String
+  companyId     String
+  role          Role    @default(EMPLOYEE)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+    /* RELATIONSHIPS */
+  user          User    @relation(fields: [userId], references: [id])
+  company       Company @relation(fields: [companyId], references: [id])
+
+  @@id([userId, companyId])
+  @@map("company_memberships")
+}
+
+
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model Invitation {
+  id          String   @id @default(cuid())
+  email       String
+  token       String   @unique
+  role        Role     @default(EMPLOYEE)
+
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+
+  companyId   String
+  inviterId   String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /* RELATIONSHIPS */
+  company     Company @relation(fields: [companyId], references: [id])
+  inviter     User    @relation(fields: [inviterId], references: [id])
+
+  @@map("invitations")
+}
+
+
