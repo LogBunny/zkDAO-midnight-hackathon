@@ -1,0 +1,132 @@
+// This file is part of midnightntwrk/example-counter.
+// Copyright (C) 2025 Midnight Foundation
+// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// You may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+pragma language_version >= 0.16 && <= 0.17;
+
+import CompactStandardLibrary;
+
+export enum ProposalState{
+  ON_VOTE,
+  APPROVED,
+  REJECTED,
+  DRAW
+}
+
+struct VoteCount {
+  upvotes: Uint<64>;
+  downvotes: Uint<64>;
+}
+
+struct Proposal {
+  title: Opaque<"string">;
+  description: Opaque<"string">;
+  votes: VoteCount;
+  author: Bytes<32>;
+  votingPeriod: Uint<64>; // number of blocks for which the proposal will be on vote
+  state: ProposalState
+}
+
+export ledger proposals: Map<Field,Proposal>;
+
+export circuit createProposal(proposalId: Field,title: Opaque<'string'>, description: Opaque<'string'>, author: Bytes<32>,votingPeriod: Uint<64>): [] {
+  const newProposal = Proposal {
+    title: disclose(title),
+    description: disclose(description),
+    votes: VoteCount { upvotes: 0, downvotes: 0 },
+    author: disclose(author),
+    votingPeriod: disclose(votingPeriod),
+    state: ProposalState.ON_VOTE
+  };
+  proposals.insert(disclose(proposalId), newProposal);
+}
+
+circuit isVotingPeriodOver(id: Field, currentBlock: Uint<64>): Boolean {
+  const proposal = proposals.lookup(disclose(id));
+  return disclose(currentBlock) >= proposal.votingPeriod;
+}
+
+export circuit endProposalVotingPeriod(id: Field,currentBlock: Uint<64>):[]{
+  if(isVotingPeriodOver(disclose(id),currentBlock)){
+    const current = proposals.lookup(disclose(id));
+    if(current.votes.upvotes>current.votes.downvotes){
+      const updatedProposal = Proposal {
+        title: current.title,
+        description: current.description,
+        votes: current.votes,
+        author: current.author,
+        votingPeriod: current.votingPeriod,
+        state: ProposalState.APPROVED
+      };
+      proposals.insert(disclose(id), updatedProposal);
+    }
+    else if(current.votes.upvotes<current.votes.downvotes){
+      const updatedProposal = Proposal {
+        title: current.title,
+        description: current.description,
+        votes: current.votes,
+        author: current.author,
+        votingPeriod: current.votingPeriod,
+        state: ProposalState.REJECTED
+      };
+      proposals.insert(disclose(id), updatedProposal);
+    }else{
+      const updatedProposal = Proposal {
+        title: current.title,
+        description: current.description,
+        votes: current.votes,
+        author: current.author,
+        votingPeriod: current.votingPeriod,
+        state: ProposalState.DRAW
+      };
+      proposals.insert(disclose(id), updatedProposal);
+    
+    }
+  }
+}
+
+export circuit voteFor(id: Field, v: Uint<64>): [] {
+  const current = proposals.lookup(disclose(id));
+  const updatedVotes = VoteCount {
+    upvotes: disclose((current.votes.upvotes + v) as Uint<64>),
+    downvotes: current.votes.downvotes
+  };
+  const updatedProposal = Proposal {
+    title: current.title,
+    description: current.description,
+    votes: updatedVotes,
+    author: current.author,
+    votingPeriod: current.votingPeriod,
+    state: current.state
+  };
+  proposals.insert(disclose(id), updatedProposal);
+}
+
+// Vote against a proposal
+export circuit voteAgainst(id: Field, v: Uint<64>): [] {
+  const current = proposals.lookup(disclose(id));
+  const updatedVotes = VoteCount {
+    upvotes: current.votes.upvotes,
+    downvotes: disclose((current.votes.downvotes+v) as Uint<64>)
+  };
+  const updatedProposal = Proposal {
+    title: current.title,
+    description: current.description,
+    votes: updatedVotes,
+    author: current.author,
+    votingPeriod: current.votingPeriod,
+    state: current.state
+  };
+  proposals.insert(disclose(id), updatedProposal);
+}
